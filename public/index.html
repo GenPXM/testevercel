@@ -1,0 +1,312 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Call</title>
+  <style>
+    #notification {
+      display: none;
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #f8d7da;
+      color: #721c24;
+      padding: 10px;
+      border: 1px solid #f5c6cb;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Video Chamada</h1>
+  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+  
+  <div>
+    <label for="peerId">ID do Usuário para Chamada:</label>
+    <input type="text" id="peerId" placeholder="Digite o ID do usuário">
+    <button id="startCall">Iniciar Chamada</button>
+  </div>
+
+  <div id="notification"></div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/adapterjs@latest/dist/adapter.js"></script>
+  <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io('http://localhost:3000');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const peerIdInput = document.getElementById('peerId');
+    const startCallButton = document.getElementById('startCall');
+    const notificationDiv = document.getElementById('notification');
+    const constraints = { video: true, audio: true };
+    let localStream;
+    let peerConnection;
+    let otherPeerId;
+    const configuration = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' }
+      ]
+    };
+
+    async function startLocalStream() {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia(constraints);
+          localVideo.srcObject = localStream;
+          socket.emit('join-room', 'room1');
+        } catch (error) {
+          console.error('Erro ao acessar dispositivos de mídia.', error);
+          alert('Não foi possível acessar a câmera ou o microfone. Verifique as permissões do navegador.');
+        }
+      } else {
+        console.error('API getUserMedia não suportada neste navegador.');
+        alert('O navegador não suporta a API getUserMedia. Tente usar um navegador mais recente.');
+      }
+    }
+
+    function initPeerConnection() {
+      peerConnection = new RTCPeerConnection(configuration);
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+      peerConnection.ontrack = event => {
+        remoteVideo.srcObject = event.streams[0];
+      };
+      peerConnection.onicecandidate = event => {
+        if (event.candidate) {
+          socket.emit('signal', { type: 'candidate', candidate: event.candidate, to: otherPeerId });
+        }
+      };
+    }
+
+    socket.on('signal', async (data) => {
+      if (data.id === otherPeerId) {
+        if (data.type === 'offer') {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          socket.emit('signal', { type: 'answer', signal: answer, to: otherPeerId });
+        } else if (data.type === 'answer') {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
+        } else if (data.type === 'candidate') {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal));
+        }
+      }
+    });
+
+    socket.on('incoming-call', (data) => {
+      // Exibe notificação de chamada recebida
+      notificationDiv.innerText = `Usuário ${data.from} está tentando te chamar!`;
+      notificationDiv.style.display = 'block';
+      
+      // Adiciona um botão para aceitar a chamada
+      const acceptButton = document.createElement('button');
+      acceptButton.innerText = 'Atender';
+      acceptButton.onclick = async () => {
+        notificationDiv.style.display = 'none';
+        otherPeerId = data.from;
+        initPeerConnection();
+        // Envia uma resposta de "ok" para o usuário que fez a chamada
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('signal', { type: 'offer', signal: offer, to: otherPeerId });
+      };
+      notificationDiv.appendChild(acceptButton);
+    });
+
+    startCallButton.addEventListener('click', async () => {
+      otherPeerId = peerIdInput.value;
+      if (otherPeerId) {
+        initPeerConnection();
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('signal', { type: 'offer', signal: offer, to: otherPeerId });
+      } else {
+        alert('Por favor, insira o ID do usuário com quem deseja se conectar.');
+      }
+    });
+
+    socket.on('user-disconnected', () => {
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', startLocalStream);
+  </script>
+</body>
+</html> -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Call</title>
+  <style>
+    #notification {
+      display: none;
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #f8d7da;
+      color: #721c24;
+      padding: 10px;
+      border: 1px solid #f5c6cb;
+      border-radius: 5px;
+    }
+    #controls {
+      margin-top: 10px;
+    }
+    #userIdDisplay {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Video Chamada</h1>
+  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+  
+  <div id="userIdDisplay">
+    <strong>Seu ID:</strong> <span id="userId"></span>
+  </div>
+  
+  <div>
+    <label for="peerId">ID do Usuário para Chamada:</label>
+    <input type="text" id="peerId" placeholder="Digite o ID do usuário">
+    <button id="startCall">Iniciar Chamada</button>
+  </div>
+
+  <div id="controls">
+    <button id="endCall">Encerrar Chamada</button>
+  </div>
+
+  <div id="notification"></div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/adapterjs@latest/dist/adapter.js"></script>
+  <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io('http://localhost:3000');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const peerIdInput = document.getElementById('peerId');
+    const startCallButton = document.getElementById('startCall');
+    const endCallButton = document.getElementById('endCall');
+    const notificationDiv = document.getElementById('notification');
+    const userIdSpan = document.getElementById('userId');
+    const constraints = { video: true, audio: true };
+    let localStream;
+    let peerConnection;
+    let otherPeerId;
+    const configuration = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' }
+      ]
+    };
+
+    async function startLocalStream() {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia(constraints);
+          localVideo.srcObject = localStream;
+          socket.emit('join-room', 'room1');
+        } catch (error) {
+          console.error('Erro ao acessar dispositivos de mídia.', error);
+          alert('Não foi possível acessar a câmera ou o microfone. Verifique as permissões do navegador.');
+        }
+      } else {
+        console.error('API getUserMedia não suportada neste navegador.');
+        alert('O navegador não suporta a API getUserMedia. Tente usar um navegador mais recente.');
+      }
+    }
+
+    function initPeerConnection() {
+      peerConnection = new RTCPeerConnection(configuration);
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+      peerConnection.ontrack = event => {
+        remoteVideo.srcObject = event.streams[0];
+      };
+      peerConnection.onicecandidate = event => {
+        if (event.candidate) {
+          socket.emit('signal', { type: 'candidate', candidate: event.candidate, to: otherPeerId });
+        }
+      };
+    }
+
+    function endCall() {
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop()); // Para todos os tracks de mídia
+        localStream = null;
+        localVideo.srcObject = null;
+      }
+      remoteVideo.srcObject = null;
+      notificationDiv.style.display = 'none'; // Oculta a notificação
+      socket.emit('leave-room', 'room1'); // Opcional: notifica o servidor que o usuário está saindo
+    }
+
+    socket.on('signal', async (data) => {
+      if (data.id === otherPeerId) {
+        if (data.type === 'offer') {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          socket.emit('signal', { type: 'answer', signal: answer, to: otherPeerId });
+        } else if (data.type === 'answer') {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
+        } else if (data.type === 'candidate') {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal));
+        }
+      }
+    });
+
+    socket.on('incoming-call', (data) => {
+      notificationDiv.innerText = `Usuário ${data.from} está tentando te chamar!`;
+      notificationDiv.style.display = 'block';
+
+      const acceptButton = document.createElement('button');
+      acceptButton.innerText = 'Atender';
+      acceptButton.onclick = async () => {
+        notificationDiv.style.display = 'none';
+        otherPeerId = data.from;
+        initPeerConnection();
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('signal', { type: 'offer', signal: offer, to: otherPeerId });
+      };
+      notificationDiv.appendChild(acceptButton);
+    });
+
+    startCallButton.addEventListener('click', async () => {
+      otherPeerId = peerIdInput.value;
+      if (otherPeerId) {
+        initPeerConnection();
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('signal', { type: 'offer', signal: offer, to: otherPeerId });
+      } else {
+        alert('Por favor, insira o ID do usuário com quem deseja se conectar.');
+      }
+    });
+
+    endCallButton.addEventListener('click', endCall);
+
+    socket.on('user-disconnected', () => {
+      endCall();
+    });
+
+    // Define o ID do usuário e exibe na tela
+    socket.on('connect', () => {
+      userIdSpan.innerText = socket.id;
+    });
+
+    document.addEventListener('DOMContentLoaded', startLocalStream);
+  </script>
+</body>
+</html>
