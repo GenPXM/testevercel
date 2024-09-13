@@ -163,12 +163,24 @@
     #userIdDisplay {
       margin-top: 10px;
     }
+    .video-container {
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
+    }
+    video {
+      width: 300px;
+      height: 200px;
+      border: 1px solid #ccc;
+    }
   </style>
 </head>
 <body>
   <h1>Video Chamada</h1>
-  <video id="localVideo" autoplay muted playsinline></video>
-  <video id="remoteVideo" autoplay playsinline></video>
+  <div class="video-container">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+  </div>
   
   <div id="userIdDisplay">
     <strong>Seu ID:</strong> <span id="userId"></span>
@@ -187,9 +199,9 @@
   <div id="notification"></div>
   
   <script src="https://cdn.jsdelivr.net/npm/adapterjs@latest/dist/adapter.js"></script>
-  <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+  <script src="https://192.168.1.127:8080/socket.io/socket.io.js"></script>
   <script>
-    const socket = io('http://localhost:3000');
+    const socket = io('https://192.168.1.127:8080');
     const localVideo = document.getElementById('localVideo');
     const remoteVideo = document.getElementById('remoteVideo');
     const peerIdInput = document.getElementById('peerId');
@@ -236,6 +248,24 @@
       };
     }
 
+    async function acceptCall(from) {
+      otherPeerId = from;
+      initPeerConnection();
+      // Listen for offer signal
+      socket.on('signal', async (data) => {
+        if (data.id === otherPeerId && data.signal.type === 'offer') {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          socket.emit('signal', { type: 'answer', signal: answer, to: otherPeerId });
+        } else if (data.signal.type === 'answer') {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
+        } else if (data.signal.type === 'candidate') {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal));
+        }
+      });
+    }
+
     function endCall() {
       if (peerConnection) {
         peerConnection.close();
@@ -253,14 +283,14 @@
 
     socket.on('signal', async (data) => {
       if (data.id === otherPeerId) {
-        if (data.type === 'offer') {
+        if (data.signal.type === 'offer') {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
           const answer = await peerConnection.createAnswer();
           await peerConnection.setLocalDescription(answer);
           socket.emit('signal', { type: 'answer', signal: answer, to: otherPeerId });
-        } else if (data.type === 'answer') {
+        } else if (data.signal.type === 'answer') {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal));
-        } else if (data.type === 'candidate') {
+        } else if (data.signal.type === 'candidate') {
           await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal));
         }
       }
@@ -272,13 +302,9 @@
 
       const acceptButton = document.createElement('button');
       acceptButton.innerText = 'Atender';
-      acceptButton.onclick = async () => {
+      acceptButton.onclick = () => {
         notificationDiv.style.display = 'none';
-        otherPeerId = data.from;
-        initPeerConnection();
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        socket.emit('signal', { type: 'offer', signal: offer, to: otherPeerId });
+        acceptCall(data.from);
       };
       notificationDiv.appendChild(acceptButton);
     });
@@ -310,3 +336,4 @@
   </script>
 </body>
 </html>
+
